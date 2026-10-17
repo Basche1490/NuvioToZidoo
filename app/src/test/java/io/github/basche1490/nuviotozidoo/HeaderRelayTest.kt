@@ -1,47 +1,77 @@
 package io.github.basche1490.nuviotozidoo
 
-import com.sun.net.httpserver.HttpServer
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
 import java.net.HttpURLConnection
-import java.net.InetSocketAddress
+import java.net.InetAddress
+import java.net.ServerSocket
+import java.net.Socket
 import java.net.URL
+import kotlin.concurrent.thread
 
 class HeaderRelayTest {
 
     private val body = ByteArray(100_000) { (it % 251).toByte() }
-    private lateinit var upstream: HttpServer
+    private lateinit var upstream: ServerSocket
     private lateinit var relay: HeaderRelay
+
+    /**
+     * A minimal HTTP server on loopback standing in for an addon's stream: it
+     * answers 403 without the right Referer and serves byte ranges.
+     */
+    private fun serveUpstream(socket: Socket) = socket.use { s ->
+        val input = s.getInputStream().bufferedReader(Charsets.ISO_8859_1)
+        input.readLine() ?: return
+        val headers = mutableMapOf<String, String>()
+        while (true) {
+            val line = input.readLine() ?: return
+            if (line.isEmpty()) break
+            val colon = line.indexOf(':')
+            if (colon > 0) headers[line.substring(0, colon).trim().lowercase()] = line.substring(colon + 1).trim()
+        }
+        val out = s.getOutputStream()
+        if (headers["referer"] != "https://addon.example/") {
+            out.write("HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".toByteArray())
+            out.flush()
+            return
+        }
+        val range = headers["range"]
+        val head = StringBuilder()
+        val part: ByteArray
+        if (range != null) {
+            val (from, to) = range.removePrefix("bytes=").split("-").map { it.toInt() }
+            part = body.copyOfRange(from, to + 1)
+            head.append("HTTP/1.1 206 Partial Content\r\n")
+            head.append("Content-Range: bytes $from-$to/${body.size}\r\n")
+        } else {
+            part = body
+            head.append("HTTP/1.1 200 OK\r\n")
+        }
+        head.append("Content-Type: video/x-matroska\r\nAccept-Ranges: bytes\r\n")
+        head.append("Content-Length: ${part.size}\r\nConnection: close\r\n\r\n")
+        out.write(head.toString().toByteArray(Charsets.ISO_8859_1))
+        out.write(part)
+        out.flush()
+    }
 
     @Before
     fun setUp() {
-        upstream = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
-        upstream.createContext("/movie.mkv") { exchange ->
-            if (exchange.requestHeaders.getFirst("Referer") != "https://addon.example/") {
-                exchange.sendResponseHeaders(403, -1)
-                exchange.close()
-                return@createContext
-            }
-            val range = exchange.requestHeaders.getFirst("Range")
-            exchange.responseHeaders.add("Content-Type", "video/x-matroska")
-            exchange.responseHeaders.add("Accept-Ranges", "bytes")
-            if (range != null) {
-                val (from, to) = range.removePrefix("bytes=").split("-").map { it.toInt() }
-                val part = body.copyOfRange(from, to + 1)
-                exchange.responseHeaders.add("Content-Range", "bytes $from-$to/${body.size}")
-                exchange.sendResponseHeaders(206, part.size.toLong())
-                exchange.responseBody.use { it.write(part) }
-            } else {
-                exchange.sendResponseHeaders(200, body.size.toLong())
-                exchange.responseBody.use { it.write(body) }
+        upstream = ServerSocket(0, 16, InetAddress.getByName("127.0.0.1"))
+        thread(isDaemon = true) {
+            while (!upstream.isClosed) {
+                val socket = try {
+                    upstream.accept()
+                } catch (_: Exception) {
+                    break
+                }
+                thread(isDaemon = true) { serveUpstream(socket) }
             }
         }
-        upstream.start()
         relay = HeaderRelay(
-            "http://127.0.0.1:${upstream.address.port}/movie.mkv?token=abc",
+            "http://127.0.0.1:${upstream.localPort}/movie.mkv?token=abc",
             HeaderRelay.parseHeaders(arrayOf("Referer: https://addon.example/", "Bad header", "X-Empty:")),
         ).start()
     }
@@ -49,7 +79,7 @@ class HeaderRelayTest {
     @After
     fun tearDown() {
         relay.close()
-        upstream.stop(0)
+        upstream.close()
     }
 
     private fun get(url: String, range: String? = null): Triple<Int, Map<String, String?>, ByteArray> {
