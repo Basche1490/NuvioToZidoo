@@ -70,10 +70,27 @@ class MonitorTest {
         assertEquals(ZidooMonitorOutcome.Finished(51_000L, 3_000_000L), outcome)
     }
 
+    private fun stopped() = ZidooPlayStatus(3_000_000L, 0L, ZidooPlayState.STOPPED)
+
     @Test
-    fun stoppedStateEnds() = runBlocking {
-        val api = FakeApi(listOf(playing(50_000L), ZidooPlayStatus(3_000_000L, 0L, ZidooPlayState.STOPPED)))
+    fun aRunOfStoppedReadingsEnds() = runBlocking {
+        val readings = listOf(playing(50_000L)) + List(ZidooPlaybackMonitor.MAX_STOPPED_READINGS) { stopped() } +
+            listOf(playing(99_000L))
+        val outcome = monitor(FakeApi(readings)).run(onStarted = {}, onSample = {})
+        assertEquals(ZidooMonitorOutcome.Finished(50_000L, 3_000_000L), outcome)
+    }
+
+    @Test
+    fun aMomentaryStoppedReadingDoesNotEnd() = runBlocking {
+        val api = FakeApi(listOf(playing(50_000L), stopped(), stopped(), playing(52_000L), playing(53_000L)))
         val outcome = monitor(api).run(onStarted = {}, onSample = {})
+        assertEquals(ZidooMonitorOutcome.Finished(53_000L, 3_000_000L), outcome)
+    }
+
+    @Test
+    fun stoppedAfterThePlayerClosedEndsAtOnce() = runBlocking {
+        val api = FakeApi(listOf(playing(50_000L), stopped(), playing(99_000L)))
+        val outcome = monitor(api).run(onStarted = {}, onSample = {}, playerClosed = { true })
         assertEquals(ZidooMonitorOutcome.Finished(50_000L, 3_000_000L), outcome)
     }
 

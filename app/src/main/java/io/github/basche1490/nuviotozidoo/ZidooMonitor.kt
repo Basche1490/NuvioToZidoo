@@ -23,8 +23,9 @@ sealed interface ZidooMonitorOutcome {
  * stops answering. Ported from the Silo Zidoo fork, which follows the
  * ZidooPlexMod add-on for ZDMC.
  *
- * - A pause is a pause, not the end: only a stopped state or [MAX_MISSED_POLLS]
- *   failed reads in a row end the playback.
+ * - A pause is a pause, not the end: only [MAX_STOPPED_READINGS] stopped readings
+ *   or [MAX_MISSED_POLLS] failed reads in a row end the playback (or the caller
+ *   saying the player closed).
  * - Zero positions are not reported. The player can read 0 for a moment after it
  *   starts, and passing that on would overwrite a resume position.
  * - Skips only happen while the player is actually playing.
@@ -64,19 +65,28 @@ class ZidooPlaybackMonitor(
 
         var lastPositionMs = 0L
         var durationMs = status.durationMs
+        var stoppedReadings = 0
         val resume = ResumeGuard(startPositionMs, durationMs)
-        while (status.durationMs > 0L && status.state != ZidooPlayState.STOPPED) {
-            durationMs = status.durationMs
-            val shortOfResumePoint = resume.isShort(status)
-            if (resume.shouldSeek()) api.seekTo(resume.resumeAtMs)
-            if (!shortOfResumePoint && status.positionMs > 0L) {
-                lastPositionMs = status.positionMs
-                onSample(ZidooSample(lastPositionMs, durationMs, status.state == ZidooPlayState.PAUSED))
-                if (status.state == ZidooPlayState.PLAYING) skipIfDue(status, onSkip)
+        while (true) {
+            if (status.durationMs > 0L && status.state != ZidooPlayState.STOPPED) {
+                stoppedReadings = 0
+                durationMs = status.durationMs
+                val shortOfResumePoint = resume.isShort(status)
+                if (resume.shouldSeek()) api.seekTo(resume.resumeAtMs)
+                if (!shortOfResumePoint && status.positionMs > 0L) {
+                    lastPositionMs = status.positionMs
+                    onSample(ZidooSample(lastPositionMs, durationMs, status.state == ZidooPlayState.PAUSED))
+                    if (status.state == ZidooPlayState.PLAYING) skipIfDue(status, onSkip)
+                }
+            } else {
+                // A stopped reading can be a moment of loading or buffering; only a run of them is the end.
+                stoppedReadings++
+                if (stoppedReadings >= MAX_STOPPED_READINGS || playerClosed()) {
+                    return ZidooMonitorOutcome.Finished(lastPositionMs, durationMs)
+                }
             }
             status = nextReading(playerClosed) ?: return ZidooMonitorOutcome.Finished(lastPositionMs, durationMs)
         }
-        return ZidooMonitorOutcome.Finished(lastPositionMs, durationMs)
     }
 
     private suspend fun awaitPlayerStart(giveUp: () -> Boolean): ZidooPlayStatus? {
@@ -108,6 +118,7 @@ class ZidooPlaybackMonitor(
     companion object {
         const val POLL_INTERVAL_MS = 1_000L
         const val MAX_MISSED_POLLS = 3
+        const val MAX_STOPPED_READINGS = 5
     }
 }
 
