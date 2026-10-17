@@ -1,0 +1,105 @@
+name: Build APK
+
+# Builds the app, runs its tests, and publishes the APK as the latest GitHub
+# Release. On the Zidoo, the newest build is always at:
+#   https://github.com/<you>/NuvioToZidoo/releases/latest/download/nuvio-to-zidoo.apk
+#
+# Every build is signed with the repo's fixed key (signing/nuviotozidoo.keystore)
+# and numbered from the run number, so each APK installs over the last one.
+# If a build fails, the end of its log is pushed to the `ci-logs` branch, where
+# Claude (or you) can read it without signing in to GitHub.
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - ".github/workflows/nuvio-check.yml"
+      - "scripts/check-nuvio.sh"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-apk
+  cancel-in-progress: false
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION_NAME: 1.0.${{ github.run_number }}
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Test and build
+        run: |
+          set -o pipefail
+          chmod +x gradlew
+          ./gradlew --no-daemon --stacktrace \
+            :app:testDebugUnitTest :app:assembleRelease \
+            -PappVersionCode=${{ github.run_number }} \
+            -PappVersionName="$VERSION_NAME" 2>&1 | tee build.log
+          cp app/build/outputs/apk/release/app-release.apk nuvio-to-zidoo.apk
+
+      - name: Check the APK is signed with the repo's key
+        run: |
+          apksigner="$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)apksigner"
+          want="$(keytool -exportcert -keystore signing/nuviotozidoo.keystore -storepass android -alias nuviotozidoo | sha256sum | cut -d' ' -f1)"
+          got="$("$apksigner" verify --print-certs nuvio-to-zidoo.apk | sed -n 's/.*certificate SHA-256 digest: //p' | head -1)"
+          echo "Signer: $got"
+          if [ "$got" != "$want" ]; then
+            echo "::error title=Wrong signing key::The APK is signed with $got, not the repo's key $want."
+            exit 1
+          fi
+
+      - name: Upload the APK to this run
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuvio-to-zidoo-apk
+          path: nuvio-to-zidoo.apk
+          if-no-files-found: error
+
+      - name: Publish a release
+        run: |
+          tag="v$VERSION_NAME"
+          notes="Nuvio To Zidoo $VERSION_NAME, built from $(git rev-parse --short=7 "$GITHUB_SHA").
+
+          Install nuvio-to-zidoo.apk on the Zidoo (Downloader app, address below). It installs over earlier builds and keeps your settings.
+
+          https://github.com/$GITHUB_REPOSITORY/releases/latest/download/nuvio-to-zidoo.apk"
+          gh release create "$tag" nuvio-to-zidoo.apk \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "Nuvio To Zidoo $VERSION_NAME" \
+            --notes "$notes" \
+            --latest
+          echo "Released $tag: https://github.com/$GITHUB_REPOSITORY/releases/latest/download/nuvio-to-zidoo.apk" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Save the end of the build log to the ci-logs branch
+        if: failure()
+        run: |
+          mkdir -p "$RUNNER_TEMP/log"
+          { echo "Run ${{ github.run_number }} on $(git rev-parse --short=7 "$GITHUB_SHA") failed at $(date -u)"; echo; tail -n 400 build.log 2>/dev/null || echo "(no build.log: the failure was before the build step)"; } > "$RUNNER_TEMP/log/last-failure.log"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout --orphan ci-logs-tmp
+          git rm -rf --quiet . || true
+          cp "$RUNNER_TEMP/log/last-failure.log" .
+          git add last-failure.log
+          git commit --quiet -m "Build log of failed run ${{ github.run_number }}"
+          git push --force origin HEAD:ci-logs

@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Nuvio To Zidoo</string>
+    <string name="app_tagline">Plays Nuvio streams in the Zidoo player, with resume, skipping and Up Next.</string>
+    <string name="version_line">Version %1$s</string>
+
+    <!-- Playback screen -->
+    <string name="up_next">Up Next</string>
+    <string name="starting">Starting</string>
+    <string name="hold_explanation">Waiting a few seconds so Nuvio keeps track of this playback. Turn this off in Nuvio To Zidoo\'s settings.</string>
+    <string name="play_now">Play now</string>
+    <string name="cancel">Cancel</string>
+    <string name="close">Close</string>
+    <string name="status_opening">Opening the Zidoo player</string>
+    <string name="status_playing">Playing in the Zidoo player</string>
+    <string name="error_headline">Can\'t play this</string>
+    <string name="error_nothing_to_play">Nuvio didn\'t send a stream to play.</string>
+    <string name="error_no_zidoo_player">No Zidoo player was found on this device. Nuvio To Zidoo only works on a Zidoo media player.</string>
+    <string name="error_player_failed">The Zidoo player could not be opened.</string>
+    <string name="toast_credits_up_next">Credits: Up Next in %1$d s. Rewind to keep watching.</string>
+    <string name="toast_keep_watching">Staying on this episode.</string>
+
+    <!-- Notification -->
+    <string name="notification_channel">Playback</string>
+    <string name="notification_title">Following playback in the Zidoo player</string>
+
+    <!-- Settings -->
+    <string name="section_status">Status</string>
+    <string name="section_setup">Set up in Nuvio</string>
+    <string name="section_playback">Playback</string>
+    <string name="section_advanced">Advanced</string>
+    <string name="status_new_player">Zidoo player found (the current one).</string>
+    <string name="status_classic_player">Zidoo player found (the classic one). Update the Zidoo firmware for the current player.</string>
+    <string name="status_no_player">No Zidoo player found. This app only works on a Zidoo media player.</string>
+    <string name="status_nuvio_tracks_zidoo">Nuvio recognises this box as a Zidoo and also follows the Zidoo player itself. If episodes don\'t move on to the next one after a pause, turn on \"Wait for Nuvio before playing\" below.</string>
+    <string name="setup_steps">1. In Nuvio: Settings → Playback → Player → External.\n2. In Nuvio, in the External Player section: turn on \"Send intro and outro timestamps\", so intros and credits can be found.\n3. In Nuvio: turn on \"Auto-play next episode\" for Up Next.\n4. Play something. When Android asks which app to use, pick Nuvio To Zidoo and choose Always.\n5. On the Zidoo: Quick settings → Playback → Play mode: Single file.</string>
+
+    <string name="setting_skip_intro">Skip intros</string>
+    <string name="setting_skip_intro_desc">Jumps over the opening when Nuvio knows where it is.</string>
+    <string name="setting_skip_recap">Skip recaps</string>
+    <string name="setting_skip_recap_desc">Jumps over \"Previously on…\" when Nuvio knows where it is.</string>
+    <string name="setting_episode_credits">When an episode reaches its credits</string>
+    <string name="setting_episode_credits_desc">Go to Up Next: after a 5 second notice the episode ends and Nuvio plays the next one. Rewind during the notice to keep watching.</string>
+    <string name="value_credits_up_next">Go to Up Next</string>
+    <string name="value_credits_keep">Keep playing</string>
+    <string name="setting_countdown">Up Next countdown</string>
+    <string name="setting_countdown_desc">How long the next episode waits before it plays, with Play now and Cancel.</string>
+    <string name="value_countdown_off">Off</string>
+    <string name="value_seconds">%1$d seconds</string>
+    <string name="setting_skip_film_credits">Skip film credits</string>
+    <string name="setting_skip_film_credits_desc">Jumps to the end of a film when its credits start. Off by default: it also skips scenes after the credits.</string>
+    <string name="setting_remember">Remember where I stopped</string>
+    <string name="setting_remember_desc">Saves your place every 10 seconds, so stopping or switching the box off resumes there even if Nuvio lost track.</string>
+    <string name="setting_player">Zidoo player</string>
+    <string name="setting_player_desc">Automatic uses the current Zidoo player when the firmware has it.</string>
+    <string name="value_player_auto">Automatic</string>
+    <string name="value_player_new">Current player</string>
+    <string name="value_player_classic">Classic player</string>
+    <string name="setting_hold">Wait for Nuvio before playing</string>
+    <string name="setting_hold_desc">Holds the start for about 15 seconds so Nuvio\'s own Zidoo tracking steps aside. Fixes episodes not moving on after a pause, at the cost of a slower start.</string>
+    <string name="action_test_api">Test the Zidoo player connection</string>
+    <string name="action_test_api_desc">Checks that the Zidoo player\'s control API answers on this box.</string>
+    <string name="test_api_ok">The Zidoo player API answered.</string>
+    <string name="test_api_failed">No answer from the Zidoo player API on port 9529.</string>
+    <string name="action_forget">Forget saved positions</string>
+    <string name="action_forget_desc">Clears this app\'s own resume points. Nuvio\'s progress stays.</string>
+    <string name="forget_done">Saved positions cleared.</string>
+    <string name="value_on">On</string>
+    <string name="value_off">Off</string>
+</resources>

@@ -1,0 +1,59 @@
+name: Nuvio compatibility check
+
+# Nuvio To Zidoo is a separate app, so Nuvio updates never need a rebuild here.
+# It only relies on how Nuvio talks to external players. Every week this
+# checks the newest NuvioMedia/NuvioTV code still does that the same way, and
+# opens an issue here if it changed, so you know before something breaks.
+
+on:
+  schedule:
+    # Mondays 13:23 UTC.
+    - cron: "23 13 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Fetch the newest Nuvio code
+        run: git clone --depth 1 https://github.com/NuvioMedia/NuvioTV.git "$RUNNER_TEMP/NuvioTV"
+
+      - name: Check Nuvio's external-player contract
+        id: check
+        run: |
+          set +e
+          bash scripts/check-nuvio.sh "$RUNNER_TEMP/NuvioTV" > "$RUNNER_TEMP/result.txt" 2>&1
+          code=$?
+          cat "$RUNNER_TEMP/result.txt"
+          { echo '```'; cat "$RUNNER_TEMP/result.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          echo "failed=$([ $code -ne 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+      - name: Open an issue if Nuvio changed
+        if: steps.check.outputs.failed == 'true'
+        run: |
+          title="Nuvio changed how it talks to external players"
+          {
+            echo "The weekly check against the newest NuvioMedia/NuvioTV code found differences:"
+            echo
+            echo '```'
+            cat "$RUNNER_TEMP/result.txt"
+            echo '```'
+            echo
+            echo "Nuvio To Zidoo may still work, but resume, skipping or Up Next could be affected."
+            echo "To fix it, ask Claude with the prompt in README.md, \"Updating with Claude\"."
+          } > "$RUNNER_TEMP/issue.md"
+          if ! gh issue list --state open --search "in:title \"$title\"" --json number --jq '.[0].number' | grep -q .; then
+            gh issue create --title "$title" --body-file "$RUNNER_TEMP/issue.md" || echo "Issues are off in this repo; see the run summary."
+          fi
+          exit 1
